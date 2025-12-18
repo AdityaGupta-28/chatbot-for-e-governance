@@ -4,7 +4,7 @@ import api from '../api';
 import { FaEye, FaEyeSlash, FaEnvelope, FaLock, FaUser, FaIdCard, FaCheckCircle, FaSpinner } from 'react-icons/fa';
 
 const Register = () => {
-    const [step, setStep] = useState(1); // 1: Register Form, 2: OTP Verification
+    const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -15,7 +15,6 @@ const Register = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // Validation Errors
     const [errors, setErrors] = useState({});
 
     const navigate = useNavigate();
@@ -24,7 +23,6 @@ const Register = () => {
         const newErrors = {};
         if (!formData.name.trim()) newErrors.name = "Name is required";
 
-        // Strict Email Regex
         const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
         if (!emailRegex.test(formData.email)) newErrors.email = "Please enter a valid email address";
 
@@ -44,7 +42,6 @@ const Register = () => {
 
         setLoading(true);
         try {
-            // First call: Register to send OTP
             const { data } = await api.post('/auth/register', formData);
             if (data.devOtp) {
                 alert(`DEV MODE OTP: ${data.devOtp}`);
@@ -68,10 +65,6 @@ const Register = () => {
                 email: formData.email,
                 otp
             });
-
-            // Login specific logic (e.g. save token) handling can be done by AuthContext, 
-            // but for now we essentially mimic 'login' success.
-            // Ideally we auto-login or redirect to login.
             alert("Verification Successful! You can now login.");
             navigate('/login');
         } catch (error) {
@@ -108,7 +101,7 @@ const Register = () => {
                                         type="text"
                                         required
                                         className={`block w-full pl-10 pr-3 py-3 border ${errors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-xl focus:ring-violet-500 focus:border-violet-500 dark:bg-slate-700 dark:text-white transition-all`}
-                                        placeholder="John Doe"
+                                        placeholder="Aditya Gupta"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     />

@@ -19,7 +19,6 @@ const updateConversationStatus = async (req, res) => {
 
         const updatedConversation = await conversation.save();
 
-        // If status changed to active (Support Ended), Notify via Socket
         if (status === 'active') {
             const io = req.app.get('io');
             const systemMsg = await Message.create({

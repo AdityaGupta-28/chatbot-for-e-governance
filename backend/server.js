@@ -28,7 +28,6 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/schemes', require('./routes/schemeRoutes'));
 app.use('/api/complaints', require('./routes/complaintRoutes'));
-app.use('/api/admin-management', require('./routes/adminManagementRoutes'));
 
 // Socket.io
 const io = new Server(server, {

@@ -2,22 +2,18 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const Scheme = require('../models/Scheme');
 
-// @desc    Get all conversations for a user
-// @route   GET /api/chat
-// @access  Private
+
 const getConversations = async (req, res) => {
     try {
         let conversations;
         if (req.user.role === 'admin') {
-            // Admin sees ALL conversations, sorted by Flagged/Priority then Date
             conversations = await Conversation.find({})
                 .populate('userId', 'name email')
                 .populate('assignedTo', 'name email')
                 .sort({ priority: 1, updatedAt: -1 });
         } else {
-            // User sees THEIR conversations
             conversations = await Conversation.find({ userId: req.user._id })
-                .populate('assignedTo', 'name email') // Added populate
+                .populate('assignedTo', 'name email')
                 .sort({ updatedAt: -1 });
         }
         res.json(conversations);
@@ -26,9 +22,8 @@ const getConversations = async (req, res) => {
     }
 };
 
-// @desc    Get messages for a conversation
-// @route   GET /api/chat/:id
-// @access  Private
+// @desc Get messages for conversation
+// @route GET /api/chat/:id
 const getMessages = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
@@ -49,15 +44,13 @@ const getMessages = async (req, res) => {
     }
 };
 
-// @desc    Send a message (User -> Bot)
-// @route   POST /api/chat
-// @access  Private
+// @desc Send message
+// @route POST /api/chat
 const sendMessage = async (req, res) => {
     const { text, conversationId } = req.body;
     let chatId = conversationId;
 
     try {
-        // Create new conversation if not provided
         if (!chatId) {
             const newConv = await Conversation.create({
                 userId: req.user._id,
@@ -65,7 +58,6 @@ const sendMessage = async (req, res) => {
             });
             chatId = newConv._id;
         } else {
-            // Verify existence and permission
             const conversation = await Conversation.findById(chatId);
             if (!conversation) {
                 return res.status(404).json({ message: 'Conversation not found' });
@@ -83,18 +75,16 @@ const sendMessage = async (req, res) => {
             await Conversation.findByIdAndUpdate(chatId, { status: 'flagged', priority: 'high' });
         }
 
-        // Parallel Execution: Save User Message, Fetch History (for AI), AND Fetch Context (RAG)
+        // Message tracking and contextual search
         const [userMessage, dbHistory, foundSchemes] = await Promise.all([
             Message.create({
                 conversationId: chatId,
                 sender: req.user.role === 'admin' ? 'admin' : 'user',
                 text,
             }),
-            // Fetch LAST 10 messages for context (only if user)
             req.user.role !== 'admin'
                 ? Message.find({ conversationId: chatId }).sort({ createdAt: -1 }).limit(10)
                 : Promise.resolve([]),
-            // Fetch relevant schemes for Context (RAG)
             req.user.role !== 'admin'
                 ? Scheme.find({
                     $or: [
@@ -107,23 +97,17 @@ const sendMessage = async (req, res) => {
                 : Promise.resolve([])
         ]);
 
-        // Emit User Message via Socket
+        // Socket emission
         const io = req.app.get('io');
         io.to(chatId).emit('receive_message', userMessage);
 
-        // Only trigger Bot if sender is User (not Admin)
         let botMessage = null;
         if (req.user.role !== 'admin') {
-            // Check Live Status: If flagged/high priority, DO NOT TRIGGER BOT unless it's the initial "talk to human" request
             let currentStatus = 'active';
             try {
                 const checkConv = await Conversation.findById(chatId);
                 currentStatus = checkConv.status;
             } catch (e) { }
-
-            // If user explicitly asked for support just now, we handled it above by setting flag.
-            // If it was ALREADY flagged, we should just let the message sit there for the admin.
-            // EXCEPT if it was the triggering message itself (isSupportRequest).
 
             if (isSupportRequest) {
                 // If support requested, send a specific bot message and skip AI
@@ -135,11 +119,9 @@ const sendMessage = async (req, res) => {
                 });
                 io.to(chatId).emit('receive_message', botMessage);
             } else if (currentStatus === 'flagged') {
-                // SILENCE THE BOT: Live Agent session is active.
-                // Do nothing.
+                // Agent session active
             } else {
-                // ... Existing AI Logic ...
-                // Call OpenRouter (Meta Llama)
+                // AI Logic (OpenRouter)
                 let botResponseText = "";
                 try {
                     const apiKey = process.env.META_API_KEY;
@@ -151,16 +133,14 @@ const sendMessage = async (req, res) => {
                         throw new Error("Missing META_API_KEY");
                     }
 
-                    // Format history: Reverse (to get chronological) -> Map
                     const messages = dbHistory.reverse().map(msg => ({
                         role: msg.sender === 'user' ? 'user' : 'assistant',
                         content: msg.text
                     }));
 
-                    // Build Context String from Found Schemes
                     let contextData = "";
                     if (foundSchemes.length > 0) {
-                        contextData = "\n\nRELEVANT GOVERNMENT DATA FOUND (Use this to answer):";
+                        contextData = "\n\nRELEVANT DATA:";
                         foundSchemes.forEach(s => {
                             contextData += `\n- Scheme: ${s.name}`;
                             contextData += `\n  Description: ${s.description}`;
@@ -172,10 +152,9 @@ const sendMessage = async (req, res) => {
                     // Add current message
                     messages.push({ role: "user", content: text + contextData });
 
-                    // System prompt
                     const systemMessage = {
                         role: "system",
-                        content: "You are a helpful Indian E-Governance Assistant. Provide accurate information about government schemes. \n\nIMPORTANT INSTRUCTIONS:\n1. If I provide 'RELEVANT GOVERNMENT DATA' in the input, you MUST use it.\n2. ALWAYS provide the 'Official Link' from the data as a Markdown link, e.g., `[Click to Apply](https://url...)`.\n3. Make your response clear, structured (use bullet points), and concise."
+                        content: "You are a helpful Indian E-Governance Assistant. Use provided context if available."
                     };
 
                     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -209,15 +188,13 @@ const sendMessage = async (req, res) => {
                     if (aiError.message) console.error("Message:", aiError.message);
                     if (aiError.cause) console.error("Cause:", aiError.cause);
 
-                    // OFFLINE / FALLBACK INTELLIGENCE
+                    // Offline fallback
                     botResponseText = "";
 
-                    // 1. Handle Greetings
                     const greetings = ['hello', 'hi', 'hey', 'start', 'help'];
                     if (greetings.some(g => lowerText.includes(g))) {
                         botResponseText = "👋 Hello! I am your E-Governance Assistant.\n\nI can help you with:\n- **PM Kisan Samman Nidhi**\n- **Aadhaar Card Updates**\n- **PAN Card Application**\n- **Ayushman Bharat**\n- **DigiLocker**\n\nAsk me about any scheme!";
                     } else {
-                        // 2. Use the schemes we already found in parallel
                         if (foundSchemes && foundSchemes.length > 0) {
                             botResponseText = "Here is the information I found (Local DB):\n\n";
                             foundSchemes.forEach(s => {
@@ -231,7 +208,6 @@ const sendMessage = async (req, res) => {
                     }
                 } // End catch (AI Error)
 
-                // Save Bot Message (Inside if !admin)
                 if (botResponseText) {
                     botMessage = await Message.create({
                         conversationId: chatId,
@@ -254,9 +230,8 @@ const sendMessage = async (req, res) => {
     }
 };
 
-// @desc    Delete a conversation
-// @route   DELETE /api/chat/:id
-// @access  Private
+// @desc Delete conversation
+// @route DELETE /api/chat/:id
 const deleteConversation = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
@@ -279,15 +254,13 @@ const deleteConversation = async (req, res) => {
     }
 };
 
-// @desc    Assign chat to admin
-// @route   PUT /api/chat/:id/assign
-// @access  Private/Admin
+// @desc Assign chat to admin
+// @route PUT /api/chat/:id/assign
 const assignChatToAdmin = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
         if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
-        // If already assigned to SOMEONE ELSE, block it
         if (conversation.assignedTo && conversation.assignedTo.toString() !== req.user._id.toString()) {
             return res.status(400).json({ message: 'Chat is already assigned to another admin' });
         }
@@ -297,13 +270,11 @@ const assignChatToAdmin = async (req, res) => {
         await conversation.save();
 
         const io = req.app.get('io');
-        // Notify the specific chat room that an agent has joined
         io.to(req.params.id).emit('agent_joined', {
             agentName: req.user.name,
             agentId: req.user._id
         });
 
-        // Also emit a system message into the chat
         const systemMsg = await Message.create({
             conversationId: conversation._id,
             sender: 'bot',
@@ -317,9 +288,8 @@ const assignChatToAdmin = async (req, res) => {
     }
 };
 
-// @desc    Release chat from admin
-// @route   PUT /api/chat/:id/release
-// @access  Private/Admin
+// @desc Release chat from admin
+// @route PUT /api/chat/:id/release
 const releaseChatFromAdmin = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
@@ -335,9 +305,8 @@ const releaseChatFromAdmin = async (req, res) => {
     }
 };
 
-// @desc    Get queue position for a flagged chat
-// @route   GET /api/chat/:id/queue
-// @access  Private
+// @desc Get queue position
+// @route GET /api/chat/:id/queue
 const getQueuePosition = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
@@ -347,9 +316,6 @@ const getQueuePosition = async (req, res) => {
             return res.json({ position: 0, message: 'Not in queue' });
         }
 
-        // Count flagged chats created/updated BEFORE this one that are NOT assigned
-        // OR just count all unassigned flagged chats created before.
-        // We use 'updatedAt' because flagging updates the timestamp.
         const position = await Conversation.countDocuments({
             status: 'flagged',
             assignedTo: null,
@@ -363,9 +329,8 @@ const getQueuePosition = async (req, res) => {
     }
 };
 
-// @desc    End support session (User side)
-// @route   PUT /api/chat/:id/end-support
-// @access  Private
+// @desc End support session (User)
+// @route PUT /api/chat/:id/end-support
 const endSupportSession = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
@@ -375,16 +340,12 @@ const endSupportSession = async (req, res) => {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
-        conversation.status = 'active'; // Reset to active (AI mode)
+        conversation.status = 'active';
         conversation.priority = 'low';
-        conversation.assignedTo = null; // Release any admin
+        conversation.assignedTo = null;
         conversation.assignedAt = null;
         await conversation.save();
 
-        // Notify Admin room or specific admin? 
-        // We rely on polling/socket updates in frontend for now. 
-        //Ideally emit socket event here if we had the io instance handy in a cleaner way, 
-        //but req.app.get('io') works.
         const io = req.app.get('io');
         io.to(req.params.id).emit('support_ended', { message: 'User ended support session' });
 
@@ -394,9 +355,8 @@ const endSupportSession = async (req, res) => {
     }
 };
 
-// @desc    End support session (Admin side)
-// @route   PUT /api/chat/:id/admin-end-support
-// @access  Private/Admin
+// @desc End support session (Admin)
+// @route PUT /api/chat/:id/admin-end-support
 const adminEndSupportSession = async (req, res) => {
     try {
         const conversation = await Conversation.findById(req.params.id);
@@ -407,7 +367,7 @@ const adminEndSupportSession = async (req, res) => {
             return res.status(401).json({ message: 'Not authorized. Chat is locked by another admin.' });
         }
 
-        conversation.status = 'active'; // Back to AI
+        conversation.status = 'active';
         conversation.priority = 'low';
         conversation.assignedTo = null;
         conversation.assignedAt = null;
@@ -418,12 +378,11 @@ const adminEndSupportSession = async (req, res) => {
         // Notify User
         const systemMsg = await Message.create({
             conversationId: conversation._id,
-            sender: 'bot', // Display as bot or system
+            sender: 'bot',
             text: "The admin has ended this support session. You are now connected to the AI assistant."
         });
         io.to(req.params.id).emit('receive_message', systemMsg);
 
-        // Notify that support ended (to refresh UI)
         io.to(req.params.id).emit('support_ended', { message: 'Admin ended support session' });
 
         res.json(conversation);

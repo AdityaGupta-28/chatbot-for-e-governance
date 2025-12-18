@@ -1,8 +1,6 @@
 const Complaint = require('../models/Complaint');
 
-// @desc    Create a new complaint
-// @route   POST /api/complaints
-// @access  Private
+// @desc Create complaint
 const createComplaint = async (req, res) => {
     try {
         const { title, description, category, priority } = req.body;
@@ -22,9 +20,7 @@ const createComplaint = async (req, res) => {
     }
 };
 
-// @desc    Get all complaints (Admin) / My complaints (User)
-// @route   GET /api/complaints
-// @access  Private
+// @desc Get complaints
 const getComplaints = async (req, res) => {
     try {
         let complaints;
@@ -42,9 +38,7 @@ const getComplaints = async (req, res) => {
     }
 };
 
-// @desc    Update complaint status/assignment (Admin)
-// @route   PUT /api/complaints/:id
-// @access  Private/Admin
+// @desc Update complaint
 const updateComplaint = async (req, res) => {
     try {
         const { status, assignedTo, resolution, priority } = req.body;
@@ -66,9 +60,7 @@ const updateComplaint = async (req, res) => {
     }
 };
 
-// @desc    Delete complaint (Admin)
-// @route   DELETE /api/complaints/:id
-// @access  Private/Admin
+// @desc Delete complaint
 const deleteComplaint = async (req, res) => {
     try {
         const complaint = await Complaint.findById(req.params.id);

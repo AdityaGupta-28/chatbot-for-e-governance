@@ -1,8 +1,6 @@
 const Scheme = require('../models/Scheme');
 
-// @desc    Get all schemes
-// @route   GET /api/schemes
-// @access  Public
+
 const getSchemes = async (req, res) => {
     try {
         const schemes = await Scheme.find({});
@@ -12,9 +10,6 @@ const getSchemes = async (req, res) => {
     }
 };
 
-// @desc    Get single scheme
-// @route   GET /api/schemes/:id
-// @access  Public
 const getSchemeById = async (req, res) => {
     try {
         const scheme = await Scheme.findById(req.params.id);
@@ -28,9 +23,7 @@ const getSchemeById = async (req, res) => {
     }
 };
 
-// @desc    Create a scheme
-// @route   POST /api/schemes
-// @access  Private/Admin
+
 const createScheme = async (req, res) => {
     try {
         const { name, description, ministry, eligibilityCriteria, benefits, link } = req.body;
@@ -51,9 +44,6 @@ const createScheme = async (req, res) => {
     }
 };
 
-// @desc    Update a scheme
-// @route   PUT /api/schemes/:id
-// @access  Private/Admin
 const updateScheme = async (req, res) => {
     try {
         const { name, description, ministry, eligibilityCriteria, benefits, link } = req.body;
@@ -78,9 +68,6 @@ const updateScheme = async (req, res) => {
     }
 };
 
-// @desc    Delete a scheme
-// @route   DELETE /api/schemes/:id
-// @access  Private/Admin
 const deleteScheme = async (req, res) => {
     try {
         const scheme = await Scheme.findById(req.params.id);

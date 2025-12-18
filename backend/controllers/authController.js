@@ -1,4 +1,3 @@
-
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
@@ -8,18 +7,17 @@ const generateToken = (id, role) => {
     return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// Generate 6 digit OTP
 const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Send Email
+
 const sendEmail = async (email, otp) => {
     try {
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-            console.log("---------------------------------------------------");
+
             console.log(`[DEV MODE] Email Service Not Configured. OTP for ${email}: ${otp}`);
-            console.log("---------------------------------------------------");
+
             return;
         }
 
@@ -42,22 +40,17 @@ const sendEmail = async (email, otp) => {
         console.log(`OTP sent to ${email}`);
     } catch (error) {
         console.error("Error sending email:", error);
-        // In dev, we might want to proceed even if email fails, provided we log the OTP
         console.log(`[FALLBACK] OTP for ${email}: ${otp}`);
     }
 };
 
-// @desc    Register new user & Send OTP
-// @route   POST /api/auth/register
-// @access  Public
+
 const registerUser = async (req, res) => {
     const { name, email, password, aadhaar } = req.body;
 
     try {
         const userExists = await User.findOne({ email });
 
-        // If user exists and is verified, error out.
-        // If user exists but NOT verified, we can overwrite/resend OTP.
         if (userExists && userExists.isVerified) {
             return res.status(400).json({ message: 'User already exists' });
         }
@@ -68,9 +61,8 @@ const registerUser = async (req, res) => {
 
         let user;
         if (userExists && !userExists.isVerified) {
-            // Update existing unverified user
             userExists.name = name;
-            userExists.password = password; // Will be hashed by pre-save
+            userExists.password = password;
             userExists.otp = otp;
             userExists.otpExpires = otpExpires;
             if (aadhaar) userExists.aadhaar = aadhaar;
@@ -105,9 +97,6 @@ const registerUser = async (req, res) => {
     }
 };
 
-// @desc    Verify OTP and Login
-// @route   POST /api/auth/verify-otp
-// @access  Public
 const verifyOTP = async (req, res) => {
     const { email, otp } = req.body;
 
@@ -130,7 +119,7 @@ const verifyOTP = async (req, res) => {
             return res.status(400).json({ message: 'OTP expired. Please register again.' });
         }
 
-        // Verification Successful
+
         user.isVerified = true;
         user.otp = undefined;
         user.otpExpires = undefined;
@@ -149,9 +138,6 @@ const verifyOTP = async (req, res) => {
     }
 };
 
-// @desc    Auth user & get token
-// @route   POST /api/auth/login
-// @access  Public
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
@@ -160,8 +146,7 @@ const loginUser = async (req, res) => {
 
         if (user && (await user.matchPassword(password))) {
             if (!user.isVerified) {
-                // Optional: Resend OTP logic here if needed, or just block
-                // For now, let's block unverified logins
+
                 return res.status(401).json({ message: 'Please verify your email first.' });
             }
 
@@ -180,9 +165,7 @@ const loginUser = async (req, res) => {
     }
 };
 
-// @desc    Admin login
-// @route   POST /api/auth/admin/login
-// @access  Public
+// @desc Admin login
 const loginAdmin = async (req, res) => {
     const { email, password } = req.body;
 
@@ -205,9 +188,7 @@ const loginAdmin = async (req, res) => {
     }
 };
 
-// @desc    Update user profile
-// @route   PUT /api/auth/profile
-// @access  Private
+// @desc Update profile
 const updateUserProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
