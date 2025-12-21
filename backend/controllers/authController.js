@@ -30,7 +30,7 @@ const sendEmail = async (email, otp) => {
         });
 
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+            from: `"E-GovBot" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Your Verification Code - E-GovBot',
             text: `Your verification code is: ${otp}. It expires in 10 minutes.`
