@@ -218,4 +218,60 @@ const updateUserProfile = async (req, res) => {
     }
 };
 
-module.exports = { registerUser, verifyOTP, loginUser, loginAdmin, updateUserProfile };
+// @desc Forgot Password - Send OTP
+const forgotPassword = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const otp = generateOTP();
+        const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+        user.otp = otp;
+        user.otpExpires = otpExpires;
+        await user.save();
+
+        await sendEmail(email, otp);
+
+        res.status(200).json({ message: 'OTP sent to your email' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc Reset Password
+const resetPassword = async (req, res) => {
+    const { email, otp, password } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.otp !== otp) {
+            return res.status(400).json({ message: 'Invalid OTP' });
+        }
+
+        if (user.otpExpires < Date.now()) {
+            return res.status(400).json({ message: 'OTP expired' });
+        }
+
+        user.password = password;
+        user.otp = undefined;
+        user.otpExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ message: 'Password reset successful' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { registerUser, verifyOTP, loginUser, loginAdmin, updateUserProfile, forgotPassword, resetPassword };
